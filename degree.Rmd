@@ -1,0 +1,174 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+
+
+```{r}
+# Load relevant packages
+library(tidyr)
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(cluster)
+library(factoextra)
+
+# Read in the dataset
+degrees <- read_csv("degrees-that-pay-back.csv", col_names=c("College.Major", "Starting.Median.Salary", "Mid.Career.Median.Salary", "Career.Percent.Growth", "Percentile.10", "Percentile.25", "Percentile.75", "Percentile.90"), skip=1)
+
+# Display the first few rows and a summary of the data frame
+head(degrees)
+summary(degrees)
+```
+
+2. Currency and strings and percents, oh my!
+```{r}
+# Clean up the data
+degrees_clean <- degrees %>%
+  mutate_at(vars(Starting.Median.Salary:Percentile.90),
+            function(x) as.numeric(gsub("[\\$,]", "", x))) %>%
+            mutate(Career.Percent.Growth = Career.Percent.Growth/100)
+```
+
+3. The elbow method
+```{r}
+# Select and scale the relevant features and store as k_means_data
+k_means_data <- degrees_clean %>%
+  select(Starting.Median.Salary, Mid.Career.Median.Salary,
+         Percentile.10, Percentile.90) %>%
+  scale()
+
+# Run the fviz_nbclust function with our selected data and methos "wss"
+elbow_method <- fviz_nbclust(k_means_data, kmeans, method = "wss")
+
+# View the plot
+elbow_method
+```
+
+4. The silhouette method
+```{r}
+# Run the fviz_nbclust function with the method "silhouette"
+sillhouette_method <- fviz_nbclust(k_means_data, kmeans,
+                                   method = "silhouette")
+
+# View the plot
+sillhouette_method
+```
+
+5. The gap statistic method
+```{r}
+# Use the clusGap function to apply the Gap Statistic Method
+gap_stat <- clusGap(k_means_data, FUN = kmeans, 
+                    nstart = 25, K.max = 15, B = 50)
+
+# Use the fviz_gap_stat function to visualize the results
+gap_stat_method <- fviz_gap_stat(gap_stat)
+
+# View the plot
+gap_stat_method
+```
+
+6. K-means algorithm
+```{r}
+# Set a random seed
+set.seed(111)
+
+# Set k equal to the optimal number of clusters
+num_clusters <- 3
+
+# Run the k-means algorithm
+k_means <- kmeans(k_means_data, centers = num_clusters, 
+                  iter.max = 15, nstart = 25)
+
+# Label the clusters of degrees_clean
+degrees_labeled <- degrees_clean %>%
+  mutate(clusters = k_means$cluster)
+```
+
+7. Visualizing the clusters
+```{r}
+# Graph the clusters by Starting and Mid Career Median Salaries
+career_growth <- ggplot(degrees_labeled, aes(x=Starting.Median.Salary,y=Mid.Career.Median.Salary, color = factor(clusters))) + 
+  geom_point(alpha = 4/5, size = 6) +
+  scale_x_continuous(labels = scales::dollar) +
+  scale_y_continuous(labels = scales::dollar) +
+  xlab("Starting Median Salary") +
+  ylab("Mid Career Median Salary") +
+  scale_color_manual(name = "Clusters", values = c("#EC2C73","#29AEC7", 
+                    "#FFDD30")) +
+  ggtitle("Clusters by Starting vs. Mid Career Median Salaries")
+
+# View the plot
+career_growth
+```
+
+8. A deeper dive into the clusters
+```{r}
+# Use the gather function to reshape degrees and
+# use mutate() to reorder the new percentile column
+degrees_perc <- degrees_labeled %>%
+  select(College.Major, Percentile.10, Percentile.25, Mid.Career.Median.Salary,
+         Percentile.75, Percentile.90, clusters) %>%
+  gather(key = percentile, value = salary, -c(College.Major, clusters)) %>%
+  mutate(percentile = factor(percentile, levels = c('Percentile.10','Percentile.25',
+            'Mid.Career.Median.Salary','Percentile.75','Percentile.90')))
+```
+
+9. The liberal arts cluster
+```{r}
+# Graph the majors of Cluster 1 by percentile
+cluster_1 <-  ggplot(degrees_perc[degrees_perc$clusters==1,], 
+                    aes(x=percentile,y=salary, 
+                    group=College.Major, color=College.Major, order=salary)) +
+                    geom_point() +
+                    geom_line() +
+                    ggtitle('Cluster 1:  The Liberal Arts') +
+                    theme(axis.text.x = element_text(size=7, angle=25)) 
+
+# View the plot
+cluster_1
+```
+
+10. The goldilocks cluster
+```{r}
+# Modify the previous plot to display Cluster 2
+cluster_2 <-  ggplot(degrees_perc[degrees_perc$clusters==2,], 
+                    aes(x=percentile,y=salary, 
+                    group=College.Major, color=College.Major, order=salary)) +
+                    geom_point() +
+                    geom_line() +
+                    ggtitle('Cluster 2:  The Goldilocks') +
+                    theme(axis.text.x = element_text(size=7, angle=25)) 
+
+# View the plot
+cluster_2
+```
+
+11. The over achiever cluster
+```{r}
+# Modify the previous plot to display Cluster 3
+degrees_perc3 <-subset(degrees_perc, clusters==3)
+cluster_3 <-  ggplot(degrees_perc2, 
+                    aes(x=percentile,y=salary, 
+                    group=College.Major, color=College.Major, order=salary)) +
+                    geom_point() +
+                    geom_line() +
+                    ggtitle("Cluster 3: The Over Achievers") +
+                    theme(axis.text.x = element_text(size=7, angle=25)) 
+
+# View the plot
+cluster_3
+```
+
+12. Every major's wonderful
+```{r}
+# Sor degrees by Career Percent Growth
+arrange(degrees_labeled, desc(Career.Percent.Growth))
+
+# Identify the two majors tied for highest career growth potential
+highest_career_growth <- c('Philosophy','Math')
+```
+
+
+
